@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Focus</title>
+
+<!-- iOS: lets "Add to Home Screen" open fullscreen like a real app -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Focus">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+
+<style>
+  :root{
+    --bg:#000; --fg:#f2f2f2; --dim:#8a8a8e; --card:#141416; --line:#26262a;
+    --accent:#a7f5c8; --accent2:#c9b8ff; --blue:#5a9bff; --orange:#ff9f45;
+    --clock: 'SF Pro Rounded', 'SF Pro Display', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  [data-theme="light"]{
+    --bg:#fff; --fg:#111; --dim:#8a8a8e; --card:#f4f4f6; --line:#e6e6ea;
+    --accent:#0f8f52; --accent2:#6b4dff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:var(--clock);
+    scroll-snap-type:y proximity; overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .screen{min-height:100svh; padding:calc(env(safe-area-inset-top) + 22px) 20px calc(env(safe-area-inset-bottom) + 22px);
+          scroll-snap-align:start; display:flex; flex-direction:column;}
+
+  /* ---------- Screen 1: StandBy clock ---------- */
+  #clockScreen{justify-content:space-between;}
+  .topbar{display:flex; justify-content:space-between; align-items:flex-start; font-size:15px; color:var(--dim); font-weight:600;}
+  .brand{display:flex; align-items:center; gap:8px;}
+  .brand .glyph{width:34px;height:34px;border-radius:9px;background:var(--card);
+    display:flex;align-items:center;justify-content:center;font-size:19px;}
+  .date{text-align:right; line-height:1.35;}
+  .date b{color:var(--fg); font-weight:700;}
+
+  .clockwrap{flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:4px;}
+  #bigClock{
+    font-weight:800; letter-spacing:-3px; line-height:.9;
+    font-size:clamp(64px, 24vw, 190px);
+    color:var(--accent); font-variant-numeric:tabular-nums;
+    text-align:center;
+  }
+  [data-theme="light"] #bigClock{color:var(--accent);}
+  .clocklabel{color:var(--dim); font-weight:600; font-size:14px; letter-spacing:2px;}
+  .statuspill{margin-top:14px; display:inline-flex; align-items:center; gap:9px;
+    padding:9px 16px; border-radius:100px; background:var(--card); font-size:14px; font-weight:600;}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--dim); transition:.3s;}
+  .dot.on{background:var(--accent); box-shadow:0 0 12px var(--accent);}
+
+  .bottombar{display:flex; justify-content:space-between; align-items:center; color:var(--dim); font-size:13px;}
+  .iconbtn{background:var(--card); border:none; color:var(--fg); width:40px;height:40px;border-radius:11px;
+    font-size:18px; cursor:pointer;}
+  .jumpbtn{background:var(--card); border:none; color:var(--fg); font-family:inherit;
+    font-weight:600; font-size:14px; padding:11px 18px; border-radius:100px; cursor:pointer; white-space:nowrap;}
+  .themeBanner{margin-top:14px; text-align:center; background:var(--card); border:none; color:var(--fg);
+    font-family:inherit; font-weight:600; font-size:14px; padding:12px 18px; border-radius:14px;
+    cursor:pointer; width:100%; letter-spacing:.2px;}
+  .themeBanner b{color:var(--accent);}
+  .scrollcue{position:absolute; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 6px);
+    text-align:center; color:var(--dim); font-size:20px; animation:bob 1.8s infinite; pointer-events:none;}
+  @keyframes bob{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(5px);opacity:.9}}
+
+  /* ---------- Cards ---------- */
+  .card{background:var(--card); border-radius:22px; padding:20px; margin-bottom:16px;}
+  .card h2{margin:0 0 2px; font-size:15px; font-weight:600; color:var(--dim); letter-spacing:.2px;}
+  .barhead{display:flex; justify-content:space-between; align-items:center;}
+  .wknav{display:flex; align-items:center; gap:10px; color:var(--dim); font-size:13px; font-weight:600;}
+  .wknav button{background:var(--bg); border:1px solid var(--line); color:var(--fg); width:30px; height:30px;
+    border-radius:9px; font-size:16px; cursor:pointer; line-height:1;}
+  [data-theme="light"] .wknav button{background:#fff;}
+  .wknav button:disabled{opacity:.3; cursor:default;}
+  .wknav span{min-width:78px; text-align:center; font-variant-numeric:tabular-nums;}
+  .huge{font-size:44px; font-weight:800; letter-spacing:-1px; font-variant-numeric:tabular-nums; line-height:1.1;}
+  .huge small{font-size:20px; font-weight:700; color:var(--dim); margin-left:4px;}
+  .delta{font-size:13px; color:var(--blue); font-weight:600; margin-top:4px;}
+
+  /* Screen-time style bars */
+  .bars{display:flex; align-items:flex-end; gap:8px; height:130px; margin:18px 0 8px;}
+  .bar{flex:1; display:flex; flex-direction:column; align-items:center; gap:8px; height:100%; justify-content:flex-end;}
+  .bar .col{width:100%; max-width:26px; background:var(--line); border-radius:7px 7px 4px 4px; min-height:4px;
+    transition:height .4s ease; position:relative;}
+  .bar .col.fill{background:linear-gradient(var(--blue), #7db2ff);}
+  .bar.today .col.fill{background:linear-gradient(var(--orange), #ffc07a);}
+  .bar .lbl{font-size:11px; color:var(--dim); font-weight:600;}
+  .bar.today .lbl{color:var(--fg);}
+  .bar .badge{position:absolute; top:-20px; left:50%; transform:translateX(-50%); font-size:14px;}
+
+  /* rewards */
+  .rewards{display:flex; gap:12px;}
+  .reward{flex:1; text-align:center; background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:16px 10px;}
+  [data-theme="light"] .reward{background:#fff;}
+  .reward .n{font-size:30px; font-weight:800; letter-spacing:-1px;}
+  .reward .t{font-size:12px; color:var(--dim); margin-top:4px; font-weight:600;}
+  .ring{--p:0; width:70px;height:70px;margin:0 auto 8px; border-radius:50%;
+    background:conic-gradient(var(--accent) calc(var(--p)*1%), var(--line) 0);
+    display:flex;align-items:center;justify-content:center; position:relative;}
+  .ring::after{content:''; position:absolute; inset:7px; border-radius:50%; background:var(--card);}
+  .ring span{position:relative; z-index:1; font-size:20px;}
+
+  /* analysis tabs */
+  .tabs{display:flex; gap:6px; background:var(--bg); border:1px solid var(--line); padding:4px; border-radius:12px; margin-bottom:16px;}
+  [data-theme="light"] .tabs{background:#fff;}
+  .tabs button{flex:1; border:none; background:transparent; color:var(--dim); font-weight:600; font-size:14px;
+    padding:9px 0; border-radius:9px; cursor:pointer; font-family:inherit;}
+  .tabs button.active{background:var(--card); color:var(--fg);}
+  .statgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .stat{background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:16px;}
+  [data-theme="light"] .stat{background:#fff;}
+  .stat .k{font-size:12px; color:var(--dim); font-weight:600;}
+  .stat .v{font-size:26px; font-weight:800; margin-top:6px; letter-spacing:-.5px; font-variant-numeric:tabular-nums;}
+  .stat.wide{grid-column:1 / -1;}
+
+  .synced{font-size:11px; color:var(--dim); text-align:center; padding:6px 0 20px;}
+
+  /* confetti */
+  .conf{position:fixed; top:-30px; font-size:22px; pointer-events:none; z-index:99; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(110vh) rotate(360deg); opacity:0;}}
+  .toast{position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 24px); transform:translateX(-50%);
+    background:var(--fg); color:var(--bg); padding:12px 20px; border-radius:100px; font-weight:700; font-size:14px;
+    z-index:100; opacity:0; transition:.4s; max-width:88vw; text-align:center;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- ============ SCREEN 1: CLOCK ============ -->
+<section class="screen" id="clockScreen">
+  <div class="topbar">
+    <div class="brand"><div class="glyph">🧠</div><div>FOCUS</div></div>
+    <div class="date"><b id="dDay">Mon 5</b><br><span id="dRest">June · 本周专注</span></div>
+  </div>
+
+  <button class="themeBanner" id="themeBanner">本周主题 · W1</button>
+
+  <div class="clockwrap">
+    <div id="bigClock">0:00:00</div>
+    <div class="clocklabel">HRS : MIN : SEC · 本周累积池</div>
+    <div class="statuspill"><span class="dot" id="statusDot"></span><span id="statusTxt">已暂停</span></div>
+  </div>
+
+  <div class="bottombar">
+    <button class="iconbtn" id="themeBtn" title="切换黑/白">◑</button>
+    <button class="jumpbtn" id="analysisBtn">📊 数据分析 →</button>
+    <button class="iconbtn" id="resetBtn" title="清空本周">⋯</button>
+  </div>
+  <div class="scrollcue">⌄</div>
+</section>
+
+<!-- ============ SCREEN 2: SCREEN TIME + REWARDS ============ -->
+<section class="screen">
+  <div class="card">
+    <div class="barhead">
+      <h2 id="weekLabel">本周专注时长</h2>
+      <div class="wknav">
+        <button id="wPrev" aria-label="上一周">‹</button>
+        <span id="wRange"></span>
+        <button id="wNext" aria-label="下一周">›</button>
+      </div>
+    </div>
+    <div class="huge" id="weekTotal">0h 0m</div>
+    <div class="delta" id="weekDelta"></div>
+    <div class="bars" id="bars"></div>
+    <div style="text-align:center;color:var(--dim);font-size:11px;margin-top:2px;">← 左右滑动查看往期 →</div>
+  </div>
+
+  <div class="card">
+    <h2>今日 & 里程碑奖励</h2>
+    <div class="rewards" style="margin-top:14px;">
+      <div class="reward">
+        <div class="ring" id="dayRing"><span id="dayRingIcon">🎯</span></div>
+        <div class="n" id="todayHrs">0.0h</div>
+        <div class="t">今日 · 满 3h 撒花 🎉</div>
+      </div>
+      <div class="reward">
+        <div class="n" id="totalHrs">0h</div>
+        <div class="t" id="milestoneTxt">累积总时长</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREEN 3: ANALYSIS ============ -->
+<section class="screen" id="analysisScreen">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="margin:0;">数据分析 Analysis</h2>
+      <button class="jumpbtn" id="backBtn" style="padding:8px 14px;">↑ 时钟</button>
+    </div>
+    <div class="tabs" id="tabs">
+      <button data-r="week" class="active">本周</button>
+      <button data-r="month">本月</button>
+      <button data-r="year">本年</button>
+    </div>
+    <div class="statgrid">
+      <div class="stat wide"><div class="k" id="rangeTotalK">本周累积</div><div class="v" id="rangeTotal">0h 0m</div></div>
+      <div class="stat"><div class="k">专注最久的一天</div><div class="v" id="bestDay">—</div></div>
+      <div class="stat"><div class="k">平均每次持续</div><div class="v" id="avgSession">—</div></div>
+      <div class="stat"><div class="k">专注次数</div><div class="v" id="sessCount">0</div></div>
+      <div class="stat"><div class="k">最长单次</div><div class="v" id="longestSess">—</div></div>
+    </div>
+  </div>
+  <div class="synced" id="syncStatus">本地存储 · 未开启云同步</div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   FIREBASE 同步配置 —— 想手机/电脑同步就填这里,不填就是本地单机。
+   步骤见我给你的说明。留空则完全本地离线运行。
+   ============================================================ */
+const firebaseConfig = {
+  // apiKey: "xxx",
+  // authDomain: "xxx.firebaseapp.com",
+  // projectId: "xxx",
+  // appId: "xxx"
+};
+/* ============================================================ */
+
+const $ = s => document.querySelector(s);
+
+/* ---------- date helpers (local time) ---------- */
+const dk = (d=new Date()) => d.toLocaleDateString('en-CA');           // YYYY-MM-DD
+const mk = (d=new Date()) => dk(d).slice(0,7);                         // YYYY-MM
+const yk = (d=new Date()) => String(d.getFullYear());
+function monday(d=new Date()){const x=new Date(d);const w=(x.getDay()+6)%7;x.setHours(0,0,0,0);x.setDate(x.getDate()-w);return x;}
+const wk = (d=new Date()) => dk(monday(d));
+
+/* ---------- state ---------- */
+function blank(){return{
+  weekStart:wk(), weekSeconds:0, programStart:wk(),
+  daily:{}, monthly:{}, yearly:{}, totalAll:0,
+  sessions:[], weeklyHistory:{}, rewardedDays:{}, milestonesHit:[],
+  theme:'dark', updatedAt:0
+};}
+let state = load();
+function load(){try{const s=JSON.parse(localStorage.getItem('focusData'));return s?{...blank(),...s}:blank();}catch(e){return blank();}}
+let saveTimer=null;
+function save(now){
+  state.updatedAt=Date.now();
+  localStorage.setItem('focusData', JSON.stringify(state));
+  if(now){syncPush();} else {clearTimeout(saveTimer); saveTimer=setTimeout(syncPush,2500);}
+}
+
+/* ---------- weekly reset ---------- */
+function ensureWeek(){
+  const cur=wk();
+  if(state.weekStart!==cur){
+    if(state.weekSeconds>0) state.weeklyHistory[state.weekStart]=state.weekSeconds;
+    state.weekStart=cur; state.weekSeconds=0; save();
+  }
+}
+
+/* ---------- timing (accrue only while app is active) ---------- */
+let lastTs=null, sessionStart=null;
+const active = () => !document.hidden && document.hasFocus();
+
+function accrue(delta){
+  ensureWeek();
+  const d=dk(),m=mk(),y=yk();
+  state.weekSeconds+=delta;
+  state.daily[d]=(state.daily[d]||0)+delta;
+  state.monthly[m]=(state.monthly[m]||0)+delta;
+  state.yearly[y]=(state.yearly[y]||0)+delta;
+  state.totalAll+=delta;
+  save();
+  checkRewards(d);
+}
+
+function onActiveChange(){
+  if(active()){
+    if(sessionStart===null){sessionStart=Date.now(); lastTs=Date.now();}
+  } else {
+    if(sessionStart!==null){
+      const s=Math.round((Date.now()-sessionStart)/1000);
+      if(s>=1) state.sessions.push({d:dk(new Date(sessionStart)), s, t:Date.now()});
+      sessionStart=null; lastTs=null; save(true);
+    }
+  }
+  renderStatus();
+}
+
+setInterval(()=>{
+  const now=Date.now();
+  if(active()){
+    if(lastTs===null) lastTs=now;
+    const delta=Math.floor((now-lastTs)/1000);
+    if(delta>0){lastTs+=delta*1000; accrue(delta);}
+  } else { lastTs=null; }
+  renderClock();
+}, 400);
+
+document.addEventListener('visibilitychange', onActiveChange);
+window.addEventListener('focus', onActiveChange);
+window.addEventListener('blur', onActiveChange);
+window.addEventListener('pagehide', ()=>{onActiveChange(); save(true);});
+
+/* ---------- formatting ---------- */
+function clock(sec){const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;}
+function hm(sec){const h=Math.floor(sec/3600),m=Math.floor(sec%3600/60);
+  return h>0?`${h}h ${m}m`:`${m}m`;}
+function mmss(sec){const m=Math.floor(sec/60),s=Math.floor(sec%60);
+  return m>=60?hm(sec):`${m}m ${String(s).padStart(2,'0')}s`;}
+
+/* ---------- render ---------- */
+function renderClock(){
+  let s=state.weekSeconds;
+  if(sessionStart!==null) s+=Math.floor((Date.now()-lastTs || 0)/1000); // already accrued each tick; weekSeconds is current
+  $('#bigClock').textContent=clock(state.weekSeconds);
+}
+function renderStatus(){
+  const on=active();
+  $('#statusDot').classList.toggle('on',on);
+  $('#statusTxt').textContent=on?'专注中…':'已暂停';
+}
+function renderDate(){
+  const d=new Date();
+  const wds=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const mos=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  $('#dDay').textContent=`${wds[d.getDay()]} ${d.getDate()}`;
+  $('#dRest').textContent=`${mos[d.getMonth()]} · 本周专注`;
+}
+
+function renderStats(){
+  // ---- screen-time chart, paged by week (weekOffset: 0=本周, -1=上周…) ----
+  const start=mondayOffset(weekOffset);
+  const days=[...Array(7)].map((_,i)=>{const d=new Date(start);d.setDate(d.getDate()+i);return d;});
+  const vals=days.map(d=>state.daily[dk(d)]||0);
+  const weekSum=vals.reduce((a,b)=>a+b,0);
+  const max=Math.max(3600,...vals);
+  const wds=['一','二','三','四','五','六','日'];
+  const today=dk();
+  const isCur=weekOffset===0;
+
+  $('#weekLabel').textContent=isCur?'本周专注时长':'该周专注时长';
+  $('#weekTotal').innerHTML=hm(weekSum).replace(/(\d+)h/,'$1<small>h</small>').replace(/(\d+)m/,'$1<small>m</small>');
+  const fmtD=d=>`${d.getMonth()+1}/${d.getDate()}`;
+  $('#wRange').textContent=`${fmtD(start)}–${fmtD(days[6])}`;
+
+  const hist=Object.values(state.weeklyHistory);
+  if(isCur && hist.length){
+    const avg=hist.reduce((a,b)=>a+b,0)/hist.length;
+    const diff=Math.round((weekSum-avg)/60);
+    $('#weekDelta').textContent=(diff>=0?`↑ 比周均多 ${diff}m`:`↓ 比周均少 ${-diff}m`);
+    $('#weekDelta').style.color=diff>=0?'var(--blue)':'var(--dim)';
+  } else $('#weekDelta').textContent='';
+
+  $('#bars').innerHTML=days.map((d,i)=>{
+    const v=vals[i], h=Math.max(4,Math.round(v/max*100));
+    const isToday=isCur && dk(d)===today;
+    const flower=v>=3*3600?`<div class="badge">🎉</div>`:'';
+    return `<div class="bar ${isToday?'today':''}">
+      <div class="col ${v>0?'fill':''}" style="height:${h}%">${flower}</div>
+      <div class="lbl">${wds[i]}</div></div>`;
+  }).join('');
+
+  const weeksBack=Math.max(0,Math.floor((monday()-new Date(state.programStart))/(7*864e5)));
+  $('#wPrev').disabled = weekOffset <= -weeksBack;
+  $('#wNext').disabled = weekOffset >= 0;
+
+  // today ring (goal 3h)
+  const todaySec=state.daily[today]||0;
+  const pct=Math.min(100,Math.round(todaySec/(3*3600)*100));
+  $('#dayRing').style.setProperty('--p',pct);
+  $('#dayRingIcon').textContent=pct>=100?'🎉':'🎯';
+  $('#todayHrs').textContent=(todaySec/3600).toFixed(1)+'h';
+
+  // total + milestone
+  const th=Math.floor(state.totalAll/3600);
+  $('#totalHrs').textContent=th+'h';
+  const MS=[10,25,50,100,250,500,1000];
+  const next=MS.find(m=>th<m);
+  $('#milestoneTxt').textContent=next?`距 ${next}h 还差 ${next-th}h`:'传奇级专注 🏆';
+
+  renderAnalysis();
+}
+
+let range='week';
+function renderAnalysis(){
+  let total, sess, dayMap;
+  const now=new Date();
+  if(range==='week'){
+    const start=monday();
+    dayMap={};for(let i=0;i<7;i++){const d=new Date(start);d.setDate(d.getDate()+i);const k=dk(d);dayMap[k]=state.daily[k]||0;}
+    total=state.weekSeconds;
+    sess=state.sessions.filter(x=>x.t && new Date(x.t)>=start);
+    $('#rangeTotalK').textContent='本周累积';
+  } else if(range==='month'){
+    dayMap=Object.fromEntries(Object.entries(state.daily).filter(([k])=>k.startsWith(mk())));
+    total=state.monthly[mk()]||0;
+    sess=state.sessions.filter(x=>dk(new Date(x.t)).startsWith(mk()));
+    $('#rangeTotalK').textContent='本月累积';
+  } else {
+    dayMap=Object.fromEntries(Object.entries(state.daily).filter(([k])=>k.startsWith(yk())));
+    total=state.yearly[yk()]||0;
+    sess=state.sessions.filter(x=>dk(new Date(x.t)).startsWith(yk()));
+    $('#rangeTotalK').textContent='本年累积';
+  }
+  $('#rangeTotal').textContent=hm(total);
+
+  const entries=Object.entries(dayMap).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  $('#bestDay').textContent=entries.length?`${hm(entries[0][1])}\u2009·\u2009${entries[0][0].slice(5)}`:'—';
+
+  const durs=sess.map(x=>x.s);
+  $('#sessCount').textContent=durs.length;
+  $('#avgSession').textContent=durs.length?mmss(Math.round(durs.reduce((a,b)=>a+b,0)/durs.length)):'—';
+  $('#longestSess').textContent=durs.length?mmss(Math.max(...durs)):'—';
+}
+
+/* ---------- rewards ---------- */
+function checkRewards(day){
+  if((state.daily[day]||0)>=3*3600 && !state.rewardedDays[day]){
+    state.rewardedDays[day]=true; save(true);
+    confetti(); toast(`🎉 今天专注满 3 小时,撒花!`);
+  }
+  const th=Math.floor(state.totalAll/3600);
+  const msgs={10:'累积 10 小时,开了个好头 💪',25:'25 小时,习惯正在形成 🌱',50:'50 小时,专注力肉眼可见 🔥',
+    100:'100 小时!你太强了 🎊',250:'250 小时,持续输出 🚀',500:'500 小时,大神级 🏅',1000:'1000 小时,传奇 🏆'};
+  for(const m of Object.keys(msgs).map(Number)){
+    if(th>=m && !state.milestonesHit.includes(m)){
+      state.milestonesHit.push(m); save(true);
+      confetti(true); toast(msgs[m]);
+    }
+  }
+}
+function confetti(big){
+  const em=['🎉','✨','🎊','⭐️','💫'];
+  const n=big?60:28;
+  for(let i=0;i<n;i++){
+    const s=document.createElement('div'); s.className='conf'; s.textContent=em[i%em.length];
+    s.style.left=Math.random()*100+'vw';
+    s.style.animationDuration=(1.8+Math.random()*1.6)+'s';
+    s.style.animationDelay=(Math.random()*0.4)+'s';
+    s.style.fontSize=(16+Math.random()*18)+'px';
+    document.body.appendChild(s);
+    setTimeout(()=>s.remove(),3800);
+  }
+}
+let toastTimer;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
+
+/* ---------- weekly theme (35-week plan) ---------- */
+const TOPICS=[
+ ["DL 基础 & 训练循环","写可复用训练框架,CIFAR-10 跑通"],
+ ["CNN","手写 ResNet-18,>90%,可视化特征"],
+ ["C++ / CUDA & 实时入门","C++ 实现几何模块 + 写一个 CUDA kernel"],
+ ["Attention & Transformer","从零实现 mini-Transformer(含 RNN 对比)"],
+ ["ViT","实现 ViT 分类,画注意力图"],
+ ["检测/分割 & 特征","YOLOv8 微调 + SAM 抠图,导出 mask"],
+ ["自监督 DINO/DINOv2","DINOv2 提特征做零样本检索/匹配"],
+ ["相机 & 多视几何","标定 + 两图三角化重建稀疏点"],
+ ["全景/球面几何 & 标定","全景相机标定 + ERP↔透视互转 [石]"],
+ ["特征匹配","SIFT vs LoFTR,弱纹理/大视角对比"],
+ ["深度估计","单目/立体深度,反投影成点云"],
+ ["点云","PointNet 分类 + ICP 配准"],
+ ["SfM & MVS","COLMAP 出位姿 + 稠密点云"],
+ ["SLAM I:原理与前后端","跑通视觉 SLAM,吃透 BA/回环 [溯]"],
+ ["SLAM II:VIO & IMU 融合","ORB-SLAM3/VIO,IMU-视觉融合稳像"],
+ ["可微渲染","PyTorch3D 拟合目标视图"],
+ ["NeRF 基础","nerfstudio 在 COLMAP 数据上训 NeRF"],
+ ["NeRF 加速","复现 Instant-NGP,对比时间/质量"],
+ ["3DGS 原理","复现 gaussian-splatting"],
+ ["3DGS 实践","自采数据训 3DGS,漫游+编辑"],
+ ["360/全景 3DGS","全景视频→3DGS,复刻 Spatial Capture [石]"],
+ ["前馈重建 I(MASt3R)","无标定图直接出点云+位姿"],
+ ["前馈重建 II(VGGT/大尺度)","前馈 vs COLMAP,大尺度分块重建 [溯]"],
+ ["Diffusion 原理","VAE/GAN 速过 + 从零 DDPM 采样"],
+ ["条件控制 & DiT","ControlNet 条件生成 + 跑小型 DiT"],
+ ["相机可控视频生成","Plücker 相机注入做轨迹可控生成(接 FilmFlow)[溯]"],
+ ["Diffusion for 3D / 世界模型","复现 ViewCrafter/WorldFM 类模块 [溯]"],
+ ["4D 动态场景","动态 3DGS / 时空一致小实验"],
+ ["实时系统 & 性能优化","把一个三维模块 C++/CUDA 化并测速"],
+ ["端上部署 & 推理优化","量化/剪枝/ONNX/TensorRT,测端上速度 [石]"],
+ ["大尺度重建工程","分块并行 + coarse-to-fine 拼接"],
+ ["复现冲刺 I","复现 WorldFM 或 MASt3R→3DGS 全链路 [溯]"],
+ ["复现冲刺 II","360→3DGS 全流程,复刻影石 Spatial Capture [石]"],
+ ["论文/preprint 冲刺","把某复现/FilmFlow 整理投 arXiv/workshop"],
+ ["Capstone + 面试","端到端 demo + C++/几何/3DGS 面试题 + 简历对齐"]
+];
+function weekIndex(){
+  const start=new Date(state.programStart), cur=monday();
+  const diff=Math.floor((cur-start)/(7*24*3600*1000));
+  return Math.max(0, Math.min(TOPICS.length-1, diff));
+}
+function renderTheme(){
+  const i=weekIndex(), t=TOPICS[i];
+  $('#themeBanner').innerHTML=`本周主题 · <b>W${i+1}</b> ${t[0]}`;
+}
+$('#themeBanner').onclick=()=>{const i=weekIndex();toast(`W${i+1} 项目：${TOPICS[i][1]}`);};
+
+/* ---------- controls ---------- */
+$('#analysisBtn').onclick=()=>document.getElementById('analysisScreen').scrollIntoView({behavior:'smooth'});
+$('#backBtn').onclick=()=>document.getElementById('clockScreen').scrollIntoView({behavior:'smooth'});
+
+/* ---------- week paging for screen-time chart ---------- */
+let weekOffset=0;
+function mondayOffset(off){const d=monday();d.setDate(d.getDate()+off*7);return d;}
+function clampOffset(){
+  const weeksBack=Math.max(0,Math.floor((monday()-new Date(state.programStart))/(7*864e5)));
+  if(weekOffset>0) weekOffset=0;
+  if(weekOffset<-weeksBack) weekOffset=-weeksBack;
+}
+$('#wPrev').onclick=()=>{weekOffset--;clampOffset();renderStats();};
+$('#wNext').onclick=()=>{weekOffset++;clampOffset();renderStats();};
+(()=>{let x0=null;const el=$('#bars');
+  el.addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+  el.addEventListener('touchend',e=>{if(x0===null)return;const dx=e.changedTouches[0].clientX-x0;x0=null;
+    if(dx>40)weekOffset--; else if(dx<-40)weekOffset++; else return;
+    clampOffset();renderStats();},{passive:true});
+})();
+$('#themeBtn').onclick=()=>{state.theme=state.theme==='dark'?'light':'dark';applyTheme();save(true);};
+function applyTheme(){document.documentElement.setAttribute('data-theme',state.theme);
+  $('meta[name=theme-color]').content=state.theme==='dark'?'#000':'#fff';}
+$('#resetBtn').onclick=()=>{
+  if(confirm('清空本周累积?(历史数据保留)')){state.weekSeconds=0;save(true);renderAll();}
+};
+$('#tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+  range=b.dataset.r;[...$('#tabs').children].forEach(x=>x.classList.toggle('active',x===b));renderAnalysis();};
+
+/* ---------- firebase sync (optional) ---------- */
+function syncPush(){if(window.__pushRemote)window.__pushRemote(state);}
+async function initSync(){
+  if(!firebaseConfig.apiKey){$('#syncStatus').textContent='本地存储 · 未开启云同步';return;}
+  try{
+    const app=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    const fs=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const a=app.initializeApp(firebaseConfig);
+    const db=fs.getFirestore(a);
+    const ref=fs.doc(db,'focus','data');
+    window.__pushRemote=(s)=>fs.setDoc(ref,s).catch(()=>{});
+    fs.onSnapshot(ref,snap=>{
+      if(!snap.exists())return;
+      const r=snap.data();
+      if((r.updatedAt||0)>(state.updatedAt||0)){
+        state={...blank(),...r};localStorage.setItem('focusData',JSON.stringify(state));renderAll();
+      }
+    });
+    $('#syncStatus').textContent='☁️ 云同步已开启 · 手机/电脑自动同步';
+  }catch(e){$('#syncStatus').textContent='云同步初始化失败,继续本地运行';}
+}
+
+/* ---------- boot ---------- */
+function renderAll(){renderDate();renderClock();renderStatus();renderStats();renderTheme();}
+applyTheme(); ensureWeek(); onActiveChange(); renderAll(); initSync();
+setInterval(renderStats, 15000);      // refresh stats periodically
+setInterval(()=>{renderDate();ensureWeek();}, 60000);
+
+/* ---------- offline (PWA service worker) ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
